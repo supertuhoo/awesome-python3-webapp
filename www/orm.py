@@ -106,10 +106,13 @@ class TextField(Field):
 class ModelMetaclass(type):
 
     def __new__(cls, name, bases, attrs):
+        # 排除Model类本身:
         if name=='Model':
             return type.__new__(cls, name, bases, attrs)
+        # 获取table名称:
         tableName = attrs.get('__table__', None) or name
         logging.info('found model: %s (table: %s)' % (name, tableName))
+        # 获取所有的Field和主键名:
         mappings = dict()
         fields = []
         primaryKey = None
@@ -119,13 +122,15 @@ class ModelMetaclass(type):
                 mappings[k] = v
                 if v.primary_key:
                     # 找到主键:
-                    if primaryKey:
-                        raise StandardError('Duplicate primary key for field: %s' % k)
+                    if primaryKey:  # StandardError is gone in Python 3, so we map it to Exception
+                        # raise StandardError('Duplicate primary key for field: %s' % k)
+                        raise Exception('Duplicate primary key for field: %s' % k)
                     primaryKey = k
                 else:
                     fields.append(k)
         if not primaryKey:
-            raise StandardError('Primary key not found.')
+            # raise StandardError('Primary key not found.')
+            raise Exception('Primary key not found.')
         for k in mappings.keys():
             attrs.pop(k)
         escaped_fields = list(map(lambda f: '`%s`' % f, fields))
@@ -133,11 +138,14 @@ class ModelMetaclass(type):
         attrs['__table__'] = tableName
         attrs['__primary_key__'] = primaryKey # 主键属性名
         attrs['__fields__'] = fields # 除主键外的属性名
+        # 构造默认的SELECT, INSERT, UPDATE和DELETE语句:
         attrs['__select__'] = 'select `%s`, %s from `%s`' % (primaryKey, ', '.join(escaped_fields), tableName)
         attrs['__insert__'] = 'insert into `%s` (%s, `%s`) values (%s)' % (tableName, ', '.join(escaped_fields), primaryKey, create_args_string(len(escaped_fields) + 1))
         attrs['__update__'] = 'update `%s` set %s where `%s`=?' % (tableName, ', '.join(map(lambda f: '`%s`=?' % (mappings.get(f).name or f), fields)), primaryKey)
         attrs['__delete__'] = 'delete from `%s` where `%s`=?' % (tableName, primaryKey)
+        # 这样，任何继承自Model的类（比如User），会自动通过ModelMetaclass扫描映射关系，并存储到自身的类属性如__table__、__mappings__中。
         return type.__new__(cls, name, bases, attrs)
+
 
 class Model(dict, metaclass=ModelMetaclass):
 
@@ -169,7 +177,7 @@ class Model(dict, metaclass=ModelMetaclass):
     @classmethod
     @asyncio.coroutine
     def findAll(cls, where=None, args=None, **kw):
-        ' find objects by where clause. '
+        """ find objects by where clause. """
         sql = [cls.__select__]
         if where:
             sql.append('where')
@@ -197,7 +205,7 @@ class Model(dict, metaclass=ModelMetaclass):
     @classmethod
     @asyncio.coroutine
     def findNumber(cls, selectField, where=None, args=None):
-        ' find number by select and where. '
+        """ find number by select and where. """
         sql = ['select %s _num_ from `%s`' % (selectField, cls.__table__)]
         if where:
             sql.append('where')
@@ -210,7 +218,7 @@ class Model(dict, metaclass=ModelMetaclass):
     @classmethod
     @asyncio.coroutine
     def find(cls, pk):
-        ' find object by primary key. '
+        """ find object by primary key. """
         rs = yield from select('%s where `%s`=?' % (cls.__select__, cls.__primary_key__), [pk], 1)
         if len(rs) == 0:
             return None

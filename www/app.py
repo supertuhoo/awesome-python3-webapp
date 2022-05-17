@@ -7,30 +7,33 @@ __author__ = 'Michael Liao'
 async web application.
 '''
 
-import logging; logging.basicConfig(level=logging.INFO)
-
-import asyncio, os, json, time
+import asyncio
+import json
+import logging
+import os
+import time
 from datetime import datetime
 
 from aiohttp import web
 from jinja2 import Environment, FileSystemLoader
 
-from config import configs
-
 import orm
+from config import configs
 from coroweb import add_routes, add_static
-
 from handlers import cookie2user, COOKIE_NAME
+
+logging.basicConfig(level=logging.INFO)
+
 
 def init_jinja2(app, **kw):
     logging.info('init jinja2...')
     options = dict(
-        autoescape = kw.get('autoescape', True),
-        block_start_string = kw.get('block_start_string', '{%'),
-        block_end_string = kw.get('block_end_string', '%}'),
-        variable_start_string = kw.get('variable_start_string', '{{'),
-        variable_end_string = kw.get('variable_end_string', '}}'),
-        auto_reload = kw.get('auto_reload', True)
+        autoescape=kw.get('autoescape', True),
+        block_start_string=kw.get('block_start_string', '{%'),
+        block_end_string=kw.get('block_end_string', '%}'),
+        variable_start_string=kw.get('variable_start_string', '{{'),
+        variable_end_string=kw.get('variable_end_string', '}}'),
+        auto_reload=kw.get('auto_reload', True)
     )
     path = kw.get('path', None)
     if path is None:
@@ -43,14 +46,17 @@ def init_jinja2(app, **kw):
             env.filters[name] = f
     app['__templating__'] = env
 
-@asyncio.coroutine
-def logger_factory(app, handler):
+
+# @asyncio.coroutine
+async def logger_factory(app, handler):
     @asyncio.coroutine
     def logger(request):
         logging.info('Request: %s %s' % (request.method, request.path))
         # yield from asyncio.sleep(0.3)
         return (yield from handler(request))
+
     return logger
+
 
 @asyncio.coroutine
 def auth_factory(app, handler):
@@ -67,7 +73,9 @@ def auth_factory(app, handler):
         if request.path.startswith('/manage/') and (request.__user__ is None or not request.__user__.admin):
             return web.HTTPFound('/signin')
         return (yield from handler(request))
+
     return auth
+
 
 @asyncio.coroutine
 def data_factory(app, handler):
@@ -81,7 +89,9 @@ def data_factory(app, handler):
                 request.__data__ = yield from request.post()
                 logging.info('request form: %s' % str(request.__data__))
         return (yield from handler(request))
+
     return parse_data
+
 
 @asyncio.coroutine
 def response_factory(app, handler):
@@ -104,7 +114,8 @@ def response_factory(app, handler):
         if isinstance(r, dict):
             template = r.get('__template__')
             if template is None:
-                resp = web.Response(body=json.dumps(r, ensure_ascii=False, default=lambda o: o.__dict__).encode('utf-8'))
+                resp = web.Response(
+                    body=json.dumps(r, ensure_ascii=False, default=lambda o: o.__dict__).encode('utf-8'))
                 resp.content_type = 'application/json;charset=utf-8'
                 return resp
             else:
@@ -112,17 +123,20 @@ def response_factory(app, handler):
                 resp = web.Response(body=app['__templating__'].get_template(template).render(**r).encode('utf-8'))
                 resp.content_type = 'text/html;charset=utf-8'
                 return resp
-        if isinstance(r, int) and t >= 100 and t < 600:
-            return web.Response(t)
+        #        if isinstance(r, int) and r >= 100 and r < 600:  # day-07中是r
+        if isinstance(r, int) and 100 <= r < 600:
+            return web.Response(r)
         if isinstance(r, tuple) and len(r) == 2:
             t, m = r
-            if isinstance(t, int) and t >= 100 and t < 600:
+            if isinstance(t, int) and 100 <= t < 600:
                 return web.Response(t, str(m))
         # default:
         resp = web.Response(body=str(r).encode('utf-8'))
         resp.content_type = 'text/plain;charset=utf-8'
         return resp
+
     return response
+
 
 def datetime_filter(t):
     delta = int(time.time() - t)
@@ -137,6 +151,7 @@ def datetime_filter(t):
     dt = datetime.fromtimestamp(t)
     return u'%s年%s月%s日' % (dt.year, dt.month, dt.day)
 
+
 @asyncio.coroutine
 def init(loop):
     yield from orm.create_pool(loop=loop, **configs.db)
@@ -149,6 +164,7 @@ def init(loop):
     srv = yield from loop.create_server(app.make_handler(), '127.0.0.1', 9000)
     logging.info('server started at http://127.0.0.1:9000...')
     return srv
+
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(init(loop))

@@ -13,7 +13,7 @@ from apis import APIError
 
 def get(path):
     '''
-    Define decorator @get('/path')
+    Define decorator @get('/path') 装饰器
     '''
     def decorator(func):
         @functools.wraps(func)
