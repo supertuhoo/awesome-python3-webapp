@@ -22,8 +22,8 @@ from config import configs
 from coroweb import add_routes, add_static
 from handlers import cookie2user, COOKIE_NAME
 
-logging.basicConfig(level=logging.INFO)
-
+# logging.basicConfig(level=logging.INFO)  # this func can't work
+logging.root.setLevel(logging.INFO)  # this func is necessary to set level as INFO
 
 def init_jinja2(app, **kw):
     logging.info('init jinja2...')
@@ -163,6 +163,7 @@ def init(loop):
     add_static(app)
     srv = yield from loop.create_server(app.make_handler(), '127.0.0.1', 9000)
     logging.info('server started at http://127.0.0.1:9000...')
+#   logging.warning('server started at http://127.0.0.1:9000...')  # default level is warn, so warning can print,info no
     return srv
 
 
